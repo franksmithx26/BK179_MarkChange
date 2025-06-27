@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BK179 API 操作面板</title>
+    <!-- 引入 Pico.css 以获得简洁美观的UI样式 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        body {
+            padding: 2rem;
+            max-width: 960px;
+            margin: auto;
+        }
+        .log-output {
+            background-color: var(--pico-secondary-background);
+            border: 1px solid var(--pico-secondary-border);
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: var(--pico-border-radius);
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        .log-output .success { color: var(--pico-color-green); }
+        .log-output .error { color: var(--pico-color-red); }
+        .log-output .info { color: var(--pico-color-blue); }
+        .log-output .request { color: var(--pico-color-orange); }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <h1>BK179 API 操作面板</h1>
+            <p>一个用于测试和操作报考一起走API的简单界面。</p>
+        </header>
+
+        <article>
+            <h2 id="api-config-title">API 配置</h2>
+            <details>
+                <summary>点击展开/折叠配置</summary>
+                <label for="apiUrl">API 服务器地址</label>
+                <input type="text" id="apiUrl" value="https://179api.gs4.fun/" placeholder="例如: http://127.0.0.1:5000/">
+                <button id="saveApiUrl">保存并应用</button>
+            </details>
+        </article>
+
+        <article id="login-section">
+            <h2>1. 用户登录</h2>
+            <div class="grid">
+                <label for="username">
+                    用户名
+                    <input type="text" id="username" name="username" placeholder="请输入用户名" required>
+                </label>
+                <label for="password">
+                    密码
+                    <input type="password" id="password" name="password" placeholder="请输入密码" required>
+                </label>
+            </div>
+            <button id="loginBtn" aria-busy="false">登录</button>
+        </article>
+
+        <article id="actions-section" class="hidden">
+            <h2>2. API 操作</h2>
+            <p>当前登录状态: <strong id="loginStatus" class="error">未登录</strong></p>
+            
+            <div class="grid">
+                <!-- 查询排名 -->
+                <div>
+                    <label for="scoreQuery">查询分数排名</label>
+                    <input type="number" id="scoreQuery" placeholder="输入分数, 例如: 600">
+                    <button id="getRankBtn" aria-busy="false">查询排名</button>
+                </div>
+                <!-- 修改分数 -->
+                <div>
+                    <label for="scoreChange">修改高考分数</label>
+                    <input type="number" id="scoreChange" placeholder="输入新分数, 例如: 580">
+                    <label for="bonusScore">
+                        加分项 (可选)
+                        <input type="number" id="bonusScore" value="0">
+                    </label>
+                    <button id="changeScoreBtn" aria-busy="false">修改分数</button>
+                </div>
+            </div>
+        </article>
+
+        <article>
+            <h2>操作日志</h2>
+            <div id="logOutput" class="log-output">
+                欢迎使用！请先配置API地址并登录。
+            </div>
+            <button id="clearLog" class="secondary outline">清空日志</button>
+        </article>
+    </main>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // --- DOM 元素获取 ---
+            const apiUrlInput = document.getElementById('apiUrl');
+            const saveApiUrlBtn = document.getElementById('saveApiUrl');
+            const loginBtn = document.getElementById('loginBtn');
+            const getRankBtn = document.getElementById('getRankBtn');
+            const changeScoreBtn = document.getElementById('changeScoreBtn');
+            const usernameInput = document.getElementById('username');
+            const passwordInput = document.getElementById('password');
+            const scoreQueryInput = document.getElementById('scoreQuery');
+            const scoreChangeInput = document.getElementById('scoreChange');
+            const bonusScoreInput = document.getElementById('bonusScore');
+            const logOutput = document.getElementById('logOutput');
+            const clearLogBtn = document.getElementById('clearLog');
+            const loginStatus = document.getElementById('loginStatus');
+            const actionsSection = document.getElementById('actions-section');
+
+            // --- API 配置 ---
+            let API_BASE_URL = localStorage.getItem('bk179ApiUrl') || 'https://179api.gs4.fun/';
+            apiUrlInput.value = API_BASE_URL;
+
+            // --- 日志函数 ---
+            const log = (message, type = 'info') => {
+                const timestamp = new Date().toLocaleTimeString();
+                logOutput.innerHTML += `<div class="${type}"><strong>[${timestamp}]</strong> ${message}</div>`;
+                logOutput.scrollTop = logOutput.scrollHeight; // 自动滚动到底部
+            };
+
+            // --- 辅助函数 ---
+            const setLoading = (button, isLoading) => {
+                button.setAttribute('aria-busy', isLoading ? 'true' : 'false');
+                button.disabled = isLoading;
+            };
+
+            // --- API 调用封装 ---
+            const apiCall = async (endpoint, options = {}) => {
+                const url = new URL(endpoint, API_BASE_URL).href;
+                log(`=> 发起请求: ${options.method || 'GET'} ${url}`, 'request');
+                if (options.body) {
+                    log(`   请求体: ${options.body}`, 'request');
+                }
+                
+                try {
+                    // 使用 credentials: 'include' 来确保跨域请求时携带cookie
+                    const response = await fetch(url, {
+                        ...options,
+                        credentials: 'include' 
+                    });
+                    
+                    const data = await response.json();
+
+                    if (data.success) {
+                        log(`<= 响应成功: ${data.message}`, 'success');
+                        if (Object.keys(data.data).length > 0) {
+                            log(`   返回数据: ${JSON.stringify(data.data)}`, 'success');
+                        }
+                    } else {
+                        log(`<= 响应失败: ${data.message}`, 'error');
+                    }
+                    return data;
+                } catch (error) {
+                    const errorMessage = `网络或服务器错误: ${error.message}`;
+                    log(errorMessage, 'error');
+                    return { success: false, message: errorMessage };
+                }
+            };
+            
+            // --- 事件监听 ---
+
+            // 保存 API 地址
+            saveApiUrlBtn.addEventListener('click', () => {
+                const newUrl = apiUrlInput.value.trim();
+                if (newUrl && (newUrl.startsWith('http://') || newUrl.startsWith('https://'))) {
+                    API_BASE_URL = newUrl.endsWith('/') ? newUrl : newUrl + '/';
+                    localStorage.setItem('bk179ApiUrl', API_BASE_URL);
+                    log(`API地址已更新为: ${API_BASE_URL}`, 'success');
+                } else {
+                    log('无效的API地址，请输入以 http:// 或 https:// 开头的完整URL。', 'error');
+                }
+            });
+
+            // 登录
+            loginBtn.addEventListener('click', async () => {
+                const username = usernameInput.value.trim();
+                const password = passwordInput.value.trim();
+                if (!username || !password) {
+                    log('用户名和密码不能为空！', 'error');
+                    return;
+                }
+
+                setLoading(loginBtn, true);
+                const data = await apiCall('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                setLoading(loginBtn, false);
+
+                if (data.success) {
+                    loginStatus.textContent = '已登录';
+                    loginStatus.className = 'success';
+                    actionsSection.classList.remove('hidden');
+                }
+            });
+
+            // 查询排名
+            getRankBtn.addEventListener('click', async () => {
+                const score = scoreQueryInput.value.trim();
+                if (!score) {
+                    log('查询分数不能为空！', 'error');
+                    return;
+                }
+
+                setLoading(getRankBtn, true);
+                await apiCall(`/api/get_rank?score=${score}`);
+                setLoading(getRankBtn, false);
+            });
+
+            // 修改分数
+            changeScoreBtn.addEventListener('click', async () => {
+                const score = parseInt(scoreChangeInput.value.trim(), 10);
+                const bonusScore = parseInt(bonusScoreInput.value.trim(), 10) || 0;
+                if (isNaN(score)) {
+                    log('修改的分数必须是有效的数字！', 'error');
+                    return;
+                }
+
+                setLoading(changeScoreBtn, true);
+                await apiCall('/api/change_score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ score, bonus_score: bonusScore })
+                });
+                setLoading(changeScoreBtn, false);
+            });
+
+            // 清空日志
+            clearLogBtn.addEventListener('click', () => {
+                logOutput.innerHTML = '';
+            });
+        });
+    </script>
+</body>
+</html>
