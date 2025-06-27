@@ -73,7 +73,7 @@ if __name__ == '__main__':
 配置完成后，直接运行Python脚本即可：
 
 ```bash
-python your_script_name.py
+python crack.py
 ```
 
 脚本将依次执行登录、获取排名、更新分数等操作，并打印出每一步的结果。
