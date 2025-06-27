@@ -1,5 +1,7 @@
 # BK179 API Server & Web UI
 
+不想部署？立即使用 [WEB UI](https://franksmithx26.github.io/BK179_MarkChange/index.html) 来操作API
+
 ## 简介
 
 本项目是一个完整的全栈应用，旨在演示如何通过Python模拟并封装对“报考一起走”网站 (`www.bk179.com`) 的操作，并提供一个简洁的Web界面来调用这些功能。
