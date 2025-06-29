@@ -169,6 +169,72 @@ class BK179CRACK:
             print(f"获取分数记录ID时发生异常: {e}")
             return None
 
+    def search_school_by_name(self, school_name: str) -> Optional[Dict[str, Any]]:
+        url = f"{self.BASE_URL}/api/other/indexSearch"
+        params = {
+            'page': '1',
+            'pagesize': '100',
+            'type': 'school',
+            'keywords': school_name
+        }
+        headers = self._build_get_headers(self.AUTH_TOKEN_GET_SCHOOL_DATA, referer=url)
+        try:
+            response = self._get(url, params=params, headers=headers)
+            data = response.json()
+            school_info = []
+            if data.get('data') and data['data'].get('list'):
+                for school in data['data'].get('list'):
+                    school_name	= school.get('school_name')
+                    school_ljdm	= school.get('school_ljdm')
+                    attribute = school.get('attribute',[])
+                    school_info.append({
+                        'name': school_name,
+                        'ljdm': school_ljdm,
+                        'attribute': attribute
+                    })
+            else:
+                print(f"API未返回有效的数据: {data.get('info', '未知错误')}")
+                return None
+            return school_info
+        except Exception as e:
+            print(f"查询学校信息时发生异常: {e}")
+            return None
+
+    def get_school_fenshuxian_by_ljdm(self, ljdm: str,batch: str) -> Optional[Dict[str, Any]]:
+        """
+        根据录取代码查询学校的分数线。
+
+        Args:
+            ljdm (str): 学校的录取代码。
+            batch (str): 录取批次，例如'本科'或'专科'。
+
+        Returns:
+            Optional[Dict[str, Any]]: 如果成功则返回学校分数线信息，否则返回None。
+        """
+        url = f"{self.BASE_URL}/api/bigdata/school/schoolMajorfen"
+        params = {
+            'year': '2024',
+            'kelei': 'li',  # 注意：科类是硬编码的
+            'batch': batch,
+            'school_dm': ljdm,
+            'tag':''
+        }
+        referer = f"{self.BASE_URL}/bigdata/schooldata/majorfen?sid={ljdm}"
+        headers = self._build_get_headers(self.AUTH_TOKEN_GET_SCHOOL_FUSHUXIAN, referer)
+
+        try:
+            response = self._get(url, params=params, headers=headers)
+            data = response.json()
+            
+            if data.get('data'):
+                return data['data']
+            else:
+                print(f"API未返回有效的分数线数据: {data.get('info', '未知错误')}")
+                return None
+        except Exception as e:
+            print(f"查询分数线时发生异常: {e}")
+            return None
+
     def get_rank_by_score(self, score: int) -> Optional[int]:
         """
         根据分数查询全省排名（位次）。
